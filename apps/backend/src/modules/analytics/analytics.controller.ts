@@ -13,12 +13,15 @@ const categoryQuerySchema = dateRangeSchema.extend({
   type: z.enum(['INCOME', 'EXPENSE']).default('EXPENSE'),
 });
 
-// Resolve familyId from auth context once auth module is wired up.
-// For now falls back to a query param so the UI can be tested without auth.
-const resolveFamilyId = (req: Request): string =>
-  (req as Request & { familyId?: string }).familyId ??
-  (req.query['familyId'] as string | undefined) ??
-  'placeholder-family-id';
+// Reads familyId injected by auth middleware. Fails explicitly when the
+// middleware was not applied — no silent fallback, no query-param bypass.
+const resolveFamilyId = (req: Request): string => {
+  const familyId = (req as Request & { familyId?: string }).familyId;
+  if (!familyId) {
+    throw AppError.unauthorized(ErrorCode.UNAUTHORIZED, 'Authentication required');
+  }
+  return familyId;
+};
 
 // ─── GET /api/v1/analytics/summary ───────────────────────────────────────────
 

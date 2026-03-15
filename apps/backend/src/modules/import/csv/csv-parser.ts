@@ -44,6 +44,8 @@ export const parseCsvBuffer = (buffer: Buffer): ParsedCsv => {
   const firstLine = content.split('\n')[0] ?? '';
   const delimiter = inferDelimiter(firstLine);
 
+  // Parse without relax_column_count so csv-parse rejects rows whose column
+  // count diverges from the header row — silent column drift stops here.
   let rows: RawCsvRow[];
   try {
     rows = parse(content, {
@@ -52,7 +54,7 @@ export const parseCsvBuffer = (buffer: Buffer): ParsedCsv => {
       skip_empty_lines: true,
       trim: true,
       bom: true,            // strip BOM if present
-      relax_column_count: true,
+      // relax_column_count intentionally omitted: column drift must be explicit.
     }) as RawCsvRow[];
   } catch (cause) {
     throw AppError.badRequest(ErrorCode.INVALID_CSV, 'Failed to parse CSV file', { cause });
@@ -70,6 +72,19 @@ export const parseCsvBuffer = (buffer: Buffer): ParsedCsv => {
   }
 
   const headers = Object.keys(rows[0] ?? {});
+
+  // Guard against a missing header row: when the first line is a data row
+  // rather than column names, csv-parse promotes it to headers and every
+  // subsequent row is interpreted with shifted columns. Detect this by
+  // checking whether ALL header values look purely numeric/date-like —
+  // no real column header should match that pattern.
+  const looksLikeDataRow = headers.length > 0 && headers.every((h) => /^[\d.,:/ -]+$/.test(h));
+  if (looksLikeDataRow) {
+    throw AppError.badRequest(
+      ErrorCode.INVALID_CSV,
+      'CSV appears to be missing a header row — the first line looks like data, not column names',
+    );
+  }
   const detectedFormat = detectBankFormat(headers);
 
   return { rows, headers, detectedFormat };

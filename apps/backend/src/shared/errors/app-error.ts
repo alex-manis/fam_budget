@@ -20,6 +20,10 @@ export class AppError extends Error {
     return new AppError(code, message, 404);
   }
 
+  static unauthorized(code: ErrorCode, message: string): AppError {
+    return new AppError(code, message, 401);
+  }
+
   static forbidden(code: ErrorCode, message: string): AppError {
     return new AppError(code, message, 403);
   }
