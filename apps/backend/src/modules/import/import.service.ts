@@ -2,23 +2,19 @@ import { randomUUID } from 'crypto';
 import { prisma } from '../../infrastructure/prisma/prisma.client.js';
 import { parseCsvBuffer } from './csv/csv-parser.js';
 import { normalizeTransactions } from './csv/csv-normalizer.js';
+import { classifyBatch } from '../ai/classification/classifier.service.js';
 import type { NormalizedTransaction } from './csv/csv.types.js';
-import type { ImportJob, ImportJobStatus, StartImportOptions } from './import.types.js';
+import type { ClassificationResult } from '../ai/classification/classification.types.js';
+import type { ImportJob, StartImportOptions } from './import.types.js';
 
 const BATCH_SIZE = 100;
 
-/**
- * In-memory job store.
- * Sufficient for a single-process deployment. Replace with Redis-backed
- * queue (e.g. BullMQ) if horizontal scaling is needed.
- */
 const jobs = new Map<string, ImportJob>();
 
 const updateJob = (job: ImportJob, patch: Partial<ImportJob>): void => {
   Object.assign(job, patch);
 };
 
-/** Fetches all existing importHash values for a family to enable dedup. */
 const fetchExistingHashes = async (familyId: string): Promise<Set<string>> => {
   const rows = await prisma.transaction.findMany({
     where: { familyId, importHash: { not: null } },
@@ -27,9 +23,36 @@ const fetchExistingHashes = async (familyId: string): Promise<Set<string>> => {
   return new Set(rows.map((r: { importHash: string | null }) => r.importHash as string));
 };
 
-/** Inserts transactions in fixed-size batches to avoid overwhelming the DB. */
+/**
+ * Fetches all categories for the family + system categories and returns
+ * a Map<lowerCaseName, id> for fast O(1) lookups during batch insert.
+ */
+const buildCategoryMap = async (familyId: string): Promise<Map<string, string>> => {
+  const categories = await prisma.category.findMany({
+    where: { OR: [{ isSystem: true }, { familyId }] },
+    select: { id: true, name: true },
+  });
+  return new Map(categories.map((c: { id: string; name: string }) => [c.name.toLowerCase(), c.id]));
+};
+
+interface EnrichedTransaction extends NormalizedTransaction {
+  categoryId: string | null;
+  isAiClassified: boolean;
+}
+
+/** Merges normalized transaction with its classification result. */
+const enrich = (
+  transaction: NormalizedTransaction,
+  classification: ClassificationResult,
+  categoryMap: Map<string, string>,
+): EnrichedTransaction => ({
+  ...transaction,
+  categoryId: categoryMap.get(classification.categoryName.toLowerCase()) ?? null,
+  isAiClassified: classification.source === 'ai',
+});
+
 const batchInsert = async (
-  transactions: NormalizedTransaction[],
+  transactions: EnrichedTransaction[],
   { accountId, userId, familyId }: Pick<StartImportOptions, 'accountId' | 'userId' | 'familyId'>,
 ): Promise<void> => {
   for (let i = 0; i < transactions.length; i += BATCH_SIZE) {
@@ -44,20 +67,17 @@ const batchInsert = async (
         merchant: t.merchant,
         date: t.date,
         importHash: t.importHash,
+        categoryId: t.categoryId,
+        isAiClassified: t.isAiClassified,
         accountId,
         userId,
         familyId,
       })),
-      // Handles race conditions when two imports run concurrently
       skipDuplicates: true,
     });
   }
 };
 
-/**
- * Core import pipeline. Runs asynchronously after the HTTP response has been
- * sent with the job ID. Updates the job record in-place so polling works.
- */
 const processImport = async (
   fileBuffer: Buffer,
   options: StartImportOptions,
@@ -66,24 +86,39 @@ const processImport = async (
   updateJob(job, { status: 'PROCESSING' });
 
   try {
-    // Step 1: Parse
+    // Step 1: Parse CSV
     const parsed = parseCsvBuffer(fileBuffer);
     updateJob(job, { totalRows: parsed.rows.length });
 
-    // Step 2: Normalize
+    // Step 2: Normalize rows
     const { transactions, errors } = normalizeTransactions(parsed);
     updateJob(job, { failedRows: errors.length, errors });
 
-    // Step 3: Deduplicate against existing data
+    // Step 3: Deduplicate
     const existingHashes = await fetchExistingHashes(options.familyId);
     const newTransactions = transactions.filter((t) => !existingHashes.has(t.importHash));
     updateJob(job, { skippedRows: transactions.length - newTransactions.length });
 
-    // Step 4: Persist
-    await batchInsert(newTransactions, options);
+    // Step 4: Classify (rule engine first, AI fallback only when needed)
+    const classificationInputs = newTransactions.map((t) => ({
+      description: t.description ?? '',
+      merchant: t.merchant,
+      amount: parseFloat(t.amount),
+      date: t.date,
+    }));
+    const classifications = await classifyBatch(classificationInputs);
+
+    // Step 5: Enrich with categoryId from DB
+    const categoryMap = await buildCategoryMap(options.familyId);
+    const enriched = newTransactions.map((t, i) =>
+      enrich(t, classifications[i] ?? { categoryName: 'Other', confidence: 0, isEssential: false, isRecurring: false, explanation: '', source: 'fallback' }, categoryMap),
+    );
+
+    // Step 6: Persist
+    await batchInsert(enriched, options);
     updateJob(job, {
       status: 'COMPLETED',
-      importedRows: newTransactions.length,
+      importedRows: enriched.length,
       completedAt: new Date(),
     });
   } catch (err) {
@@ -93,16 +128,11 @@ const processImport = async (
       errors: [{ row: 0, message }],
       completedAt: new Date(),
     });
-    // Re-throw so the unhandled rejection is visible in logs
     throw err;
   }
 };
 
 export const importService = {
-  /**
-   * Creates a job record, starts the import pipeline in the background,
-   * and returns the job immediately so the caller can return 202.
-   */
   start(fileBuffer: Buffer, options: StartImportOptions): ImportJob {
     const jobId = randomUUID();
     const job: ImportJob = {
@@ -117,10 +147,7 @@ export const importService = {
     };
 
     jobs.set(jobId, job);
-
-    // Fire-and-forget — errors are captured inside processImport
     void processImport(fileBuffer, options, job);
-
     return job;
   },
 
