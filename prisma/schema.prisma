@@ -1,0 +1,324 @@
+// Prisma schema for FamBudget
+// Single source of truth for all DB entities and relations
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum FamilyRole {
+  OWNER
+  MEMBER
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+  TRANSFER
+}
+
+enum TransactionSource {
+  MANUAL
+  CSV_IMPORT
+  RECURRING
+}
+
+enum CategoryType {
+  INCOME
+  EXPENSE
+}
+
+enum AccountType {
+  CHECKING
+  SAVINGS
+  CASH
+  CREDIT
+}
+
+enum RecurringFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
+enum InsightType {
+  SPENDING_PATTERN
+  BUDGET_WARNING
+  SAVING_OPPORTUNITY
+  ANOMALY
+  MONTHLY_SUMMARY
+}
+
+// ---------------------------------------------------------------------------
+// User & Family
+// ---------------------------------------------------------------------------
+
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  passwordHash   String
+  name           String
+  // Nullable: linked only after user connects Telegram bot
+  telegramChatId String?  @unique
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  families     FamilyMember[]
+  accounts     Account[]
+  transactions Transaction[]
+  recurringRules RecurringRule[]
+
+  @@map("users")
+}
+
+model Family {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members        FamilyMember[]
+  categories     Category[]
+  accounts       Account[]
+  transactions   Transaction[]
+  budgets        Budget[]
+  recurringRules RecurringRule[]
+  insights       AiInsight[]
+
+  @@map("families")
+}
+
+// Join table with role — one user can belong to multiple families
+model FamilyMember {
+  id       String     @id @default(cuid())
+  role     FamilyRole @default(MEMBER)
+  joinedAt DateTime   @default(now())
+
+  userId   String
+  familyId String
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, familyId])
+  @@map("family_members")
+}
+
+// ---------------------------------------------------------------------------
+// Account (bank account, wallet, cash, credit card)
+// ---------------------------------------------------------------------------
+
+model Account {
+  id       String      @id @default(cuid())
+  name     String
+  type     AccountType @default(CHECKING)
+  // Stored in minor units (kopecks, cents) to avoid float issues
+  balance  Decimal     @default(0) @db.Decimal(18, 2)
+  currency String      @default("ILS") @db.VarChar(3)
+  isActive Boolean     @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId   String
+  familyId String
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  transactions         Transaction[] @relation("AccountTransactions")
+  // For TRANSFER type — destination account
+  transferTransactions Transaction[] @relation("TransferDestination")
+  recurringRules       RecurringRule[]
+
+  @@map("accounts")
+}
+
+// ---------------------------------------------------------------------------
+// Category
+// ---------------------------------------------------------------------------
+
+model Category {
+  id       String       @id @default(cuid())
+  name     String
+  icon     String?      // emoji or icon key
+  color    String?      @db.VarChar(7) // hex color
+  type     CategoryType
+  // System categories are shared across all families; family categories are private
+  isSystem Boolean      @default(false)
+
+  // Optional parent for one level of hierarchy (e.g. Food → Restaurants)
+  parentId String?
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryHierarchy")
+
+  // Null for system categories
+  familyId String?
+  family   Family? @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  transactions   Transaction[]
+  budgetLines    BudgetCategory[]
+  recurringRules RecurringRule[]
+
+  @@map("categories")
+}
+
+// ---------------------------------------------------------------------------
+// Transaction
+// ---------------------------------------------------------------------------
+
+model Transaction {
+  id          String            @id @default(cuid())
+  amount      Decimal           @db.Decimal(18, 2)
+  currency    String            @default("ILS") @db.VarChar(3)
+  type        TransactionType
+  source      TransactionSource @default(MANUAL)
+  description String?
+  merchant    String?
+  date        DateTime
+
+  // Null when transaction is pending AI classification
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id])
+
+  // SHA-256 of the raw CSV row — prevents duplicate imports
+  importHash String? @unique
+
+  isAiClassified Boolean @default(false)
+
+  // Destination account for TRANSFER type
+  toAccountId String?
+  toAccount   Account? @relation("TransferDestination", fields: [toAccountId], references: [id])
+
+  // Source recurring rule, if generated automatically
+  recurringRuleId String?
+  recurringRule   RecurringRule? @relation(fields: [recurringRuleId], references: [id])
+
+  accountId String
+  account   Account @relation("AccountTransactions", fields: [accountId], references: [id])
+
+  userId   String
+  user     User   @relation(fields: [userId], references: [id])
+
+  familyId String
+  family   Family @relation(fields: [familyId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([familyId, date])
+  @@index([familyId, categoryId])
+  @@index([accountId, date])
+  @@index([importHash])
+  @@map("transactions")
+}
+
+// ---------------------------------------------------------------------------
+// Recurring Rule (subscription, salary, rent, etc.)
+// ---------------------------------------------------------------------------
+
+model RecurringRule {
+  id        String             @id @default(cuid())
+  name      String
+  amount    Decimal            @db.Decimal(18, 2)
+  currency  String             @default("ILS") @db.VarChar(3)
+  type      TransactionType
+  frequency RecurringFrequency
+  startDate DateTime
+  // Null = runs indefinitely
+  endDate   DateTime?
+  // Scheduler uses this to know when to generate the next transaction
+  nextRunAt DateTime
+  isActive  Boolean            @default(true)
+
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id])
+
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id])
+
+  userId   String
+  user     User   @relation(fields: [userId], references: [id])
+
+  familyId String
+  family   Family @relation(fields: [familyId], references: [id])
+
+  transactions Transaction[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([nextRunAt, isActive])
+  @@map("recurring_rules")
+}
+
+// ---------------------------------------------------------------------------
+// Budget
+// ---------------------------------------------------------------------------
+
+// One budget per family per month. Month stored as "YYYY-MM" string for
+// simple filtering without date truncation in queries.
+model Budget {
+  id    String @id @default(cuid())
+  name  String
+  // Format: "2024-03"
+  month String @db.VarChar(7)
+
+  familyId  String
+  createdBy String
+
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  lines BudgetCategory[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([familyId, month])
+  @@map("budgets")
+}
+
+// Per-category spending limit within a budget
+model BudgetCategory {
+  id          String  @id @default(cuid())
+  limitAmount Decimal @db.Decimal(18, 2)
+
+  budgetId   String
+  categoryId String
+
+  budget   Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id])
+
+  @@unique([budgetId, categoryId])
+  @@map("budget_categories")
+}
+
+// ---------------------------------------------------------------------------
+// AI Insight
+// ---------------------------------------------------------------------------
+
+model AiInsight {
+  id          String      @id @default(cuid())
+  type        InsightType
+  // Generated markdown/text content from OpenAI
+  content     String      @db.Text
+  // The period this insight covers
+  periodStart DateTime
+  periodEnd   DateTime
+  generatedAt DateTime    @default(now())
+
+  familyId String
+  family   Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  @@index([familyId, generatedAt])
+  @@map("ai_insights")
+}

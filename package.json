@@ -1,0 +1,8 @@
+{
+  "name": "fambudget",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
+}
