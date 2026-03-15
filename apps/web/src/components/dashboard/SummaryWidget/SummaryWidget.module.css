@@ -1,0 +1,65 @@
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 480px) {
+  .stats {
+    grid-template-columns: 1fr;
+  }
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px;
+  border-radius: var(--radius-md);
+}
+
+.stat--income {
+  background-color: var(--color-income-light);
+}
+
+.stat--expense {
+  background-color: var(--color-expense-light);
+}
+
+.stat--balance {
+  background-color: var(--color-primary-light);
+}
+
+.stat__label {
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-secondary);
+}
+
+.stat__value {
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+  line-height: 1.2;
+}
+
+.stat--income .stat__value {
+  color: var(--color-income);
+}
+
+.stat--expense .stat__value {
+  color: var(--color-expense);
+}
+
+.stat--balance .stat__value {
+  color: var(--color-primary);
+}
+
+.count {
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
