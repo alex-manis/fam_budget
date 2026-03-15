@@ -1,0 +1,17 @@
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 180px;
+}
+
+.empty__icon {
+  font-size: 32px;
+}
+
+.empty__text {
+  font-size: 14px;
+  color: var(--color-text-muted);
+}

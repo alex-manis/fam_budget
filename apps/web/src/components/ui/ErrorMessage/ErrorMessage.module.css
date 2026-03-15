@@ -1,0 +1,38 @@
+.error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  min-height: 120px;
+  text-align: center;
+}
+
+.error__icon {
+  font-size: 24px;
+}
+
+.error__message {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  max-width: 280px;
+}
+
+.error__retry {
+  margin-top: 4px;
+  padding: 6px 16px;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.error__retry:hover {
+  background-color: var(--color-primary);
+  color: #fff;
+}
