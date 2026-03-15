@@ -97,3 +97,28 @@ export const getDailySpending = async (
     next(err);
   }
 };
+
+// ─── GET /api/v1/analytics/forecast ──────────────────────────────────────────
+// No query params required — always forecasts the current calendar month.
+
+export const getForecast = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { startOfMonth, endOfMonth } = await import('date-fns');
+    const now = new Date();
+    const familyId = resolveFamilyId(req);
+
+    const data = await analyticsService.getForecast(
+      familyId,
+      startOfMonth(now),
+      endOfMonth(now),
+    );
+
+    res.json({ data });
+  } catch (err) {
+    next(err);
+  }
+};

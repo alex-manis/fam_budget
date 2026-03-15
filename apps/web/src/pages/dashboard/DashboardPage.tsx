@@ -5,6 +5,7 @@ import {
   DailySpendingChart,
   RecentTransactions,
   AiInsightsWidget,
+  ForecastWidget,
 } from '@/components/dashboard';
 import styles from './DashboardPage.module.css';
 
@@ -34,23 +35,30 @@ export const DashboardPage = () => {
           </div>
         </section>
 
-        {/* Row 2: Daily chart (wide) + Category pie (narrow) */}
+        {/* Row 2: Daily chart (wide) + Forecast (narrow) */}
         <section className={styles.row}>
           <div className={styles.col__wide}>
             <DailySpendingChart />
           </div>
           <div className={styles.col__narrow}>
-            <ExpensesByCategoryChart />
+            <ForecastWidget />
           </div>
         </section>
 
-        {/* Row 3: Recent transactions (wide) + AI insights (narrow) */}
+        {/* Row 3: Category pie (wide) + AI insights (narrow) */}
         <section className={styles.row}>
           <div className={styles.col__wide}>
-            <RecentTransactions />
+            <ExpensesByCategoryChart />
           </div>
           <div className={styles.col__narrow}>
             <AiInsightsWidget />
+          </div>
+        </section>
+
+        {/* Row 4: Recent transactions — full width */}
+        <section className={styles.row}>
+          <div className={styles.col__full}>
+            <RecentTransactions />
           </div>
         </section>
       </main>

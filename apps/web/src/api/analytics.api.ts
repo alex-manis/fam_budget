@@ -3,6 +3,7 @@ import type {
   AnalyticsSummary,
   CategoryBreakdownItem,
   DailySpendingItem,
+  ForecastResult,
 } from '@/types/analytics.types';
 
 interface DateRange {
@@ -22,3 +23,7 @@ export const fetchAnalyticsByCategory = (
 
 export const fetchDailySpending = (range: DateRange): Promise<DailySpendingItem[]> =>
   apiFetch<DailySpendingItem[]>(`/analytics/daily${buildQuery(range)}`);
+
+// No params — always forecasts the current calendar month on the server side
+export const fetchForecast = (): Promise<ForecastResult> =>
+  apiFetch<ForecastResult>('/analytics/forecast');
