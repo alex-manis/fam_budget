@@ -1,0 +1,169 @@
+/* ─── Progress bar ─────────────────────────────────────────────────────────── */
+
+.progress {
+  margin-bottom: 20px;
+}
+
+.progress__labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.progress__spent {
+  color: var(--color-expense);
+  font-weight: 600;
+}
+
+.progress__forecast {
+  color: var(--color-text-secondary);
+}
+
+.progress__bar {
+  height: 8px;
+  background-color: var(--color-border);
+  border-radius: 100px;
+  overflow: hidden;
+}
+
+.progress__fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-expense) 0%, #f97316 100%);
+  border-radius: 100px;
+  transition: width 0.4s ease;
+}
+
+.progress__pct {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  text-align: right;
+}
+
+/* ─── Formula breakdown ────────────────────────────────────────────────────── */
+
+.formula {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 20px;
+}
+
+.formula__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+}
+
+.formula__row--neutral {
+  background-color: var(--color-surface-alt);
+}
+
+.formula__row--projected {
+  background-color: #fff7ed;
+}
+
+.formula__row--recurring {
+  background-color: var(--color-primary-light);
+}
+
+.formula__row--total {
+  background-color: var(--color-expense-light);
+}
+
+.formula__label {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  flex: 1;
+}
+
+.formula__value {
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+  flex-shrink: 0;
+}
+
+.formula__row--total .formula__value {
+  color: var(--color-expense);
+  font-size: 16px;
+}
+
+.formula__divider {
+  text-align: center;
+  font-size: 16px;
+  color: var(--color-text-muted);
+  line-height: 1;
+  margin: 0 auto;
+  padding: 0 4px;
+}
+
+.formula__separator {
+  height: 1px;
+  background-color: var(--color-border);
+  margin: 4px 0;
+}
+
+/* ─── Recurring items ──────────────────────────────────────────────────────── */
+
+.recurring {
+  border-top: 1px solid var(--color-border);
+  padding-top: 16px;
+}
+
+.recurring__title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+  margin-bottom: 10px;
+}
+
+.recurring__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.recurring__row:last-child {
+  border-bottom: none;
+}
+
+.recurring__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.recurring__name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recurring__meta {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.recurring__amount {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-expense);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
