@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
+import { requireAuth } from '../../middleware/auth.middleware.js';
 import { uploadCsv, getImportJob } from './import.controller.js';
 import { AppError } from '../../shared/errors/app-error.js';
 import { ErrorCode } from '../../shared/errors/error-codes.js';
@@ -24,6 +25,8 @@ const upload = multer({
 });
 
 export const importRouter = Router();
+
+importRouter.use(requireAuth);
 
 importRouter.post('/csv', upload.single('file'), uploadCsv);
 importRouter.get('/csv/jobs/:jobId', getImportJob);

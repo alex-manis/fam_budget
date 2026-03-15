@@ -156,8 +156,18 @@ export const getDailySpending = async (
 // ─── Forecast ─────────────────────────────────────────────────────────────────
 
 /**
- * Count how many times a recurring rule will fire between `from` (exclusive)
- * and `to` (inclusive), based on its frequency and nextRunAt.
+ * Count how many times a recurring rule will fire within [windowStart, windowEnd].
+ *
+ * The key insight: `nextRunAt` is the anchor for the firing cadence, not
+ * `windowStart`. We must first find the effective first firing inside the
+ * window (`effectiveStart = max(nextRunAt, windowStart)`), then count
+ * forward from that day.
+ *
+ * Previous bugs:
+ *  - DAILY used `daysInWindow = diff(effectiveEnd, windowStart)` which (a)
+ *    ignored nextRunAt and (b) was off-by-one (exclusive of the start day).
+ *  - WEEKLY added `+ 1` whenever `nextRunAt <= effectiveEnd`, without
+ *    confirming it also fell inside the window, causing overcounting.
  */
 const countOccurrences = (
   nextRunAt: Date,
@@ -172,13 +182,21 @@ const countOccurrences = (
   if (nextRunAt > windowEnd) return 0;
 
   const effectiveEnd = endDate && endDate < windowEnd ? endDate : windowEnd;
-  const daysInWindow = differenceInCalendarDays(effectiveEnd, windowStart);
+
+  // First firing at or after windowStart — this is the cadence anchor.
+  const effectiveStart = nextRunAt >= windowStart ? nextRunAt : windowStart;
+  if (effectiveStart > effectiveEnd) return 0;
+
+  // Number of calendar days from the first firing to the window end (inclusive).
+  const daysSpan = differenceInCalendarDays(effectiveEnd, effectiveStart);
 
   switch (frequency) {
     case 'DAILY':
-      return Math.max(0, daysInWindow);
+      // Fires on effectiveStart and every subsequent day → daysSpan + 1.
+      return daysSpan + 1;
     case 'WEEKLY':
-      return Math.max(0, Math.floor(daysInWindow / 7) + (nextRunAt <= effectiveEnd ? 1 : 0));
+      // Fires on effectiveStart and every 7th day after → floor(daysSpan/7) + 1.
+      return Math.floor(daysSpan / 7) + 1;
     case 'MONTHLY':
     case 'YEARLY':
       return nextRunAt >= windowStart && nextRunAt <= effectiveEnd ? 1 : 0;

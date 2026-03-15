@@ -12,10 +12,13 @@ const listQuerySchema = z.object({
   type: z.enum(['INCOME', 'EXPENSE', 'TRANSFER']).optional(),
 });
 
-const resolveFamilyId = (req: Request): string =>
-  (req as Request & { familyId?: string }).familyId ??
-  (req.query['familyId'] as string | undefined) ??
-  'placeholder-family-id';
+const resolveFamilyId = (req: Request): string => {
+  const familyId = (req as Request & { familyId?: string }).familyId;
+  if (!familyId) {
+    throw AppError.unauthorized(ErrorCode.UNAUTHORIZED, 'Authentication required');
+  }
+  return familyId;
+};
 
 export const getTransactions = async (
   req: Request,

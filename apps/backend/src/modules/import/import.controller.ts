@@ -24,9 +24,11 @@ export const uploadCsv = (req: Request, res: Response, next: NextFunction): void
       });
     }
 
-    // TODO: replace with real auth context once the auth module is wired up
-    const userId = (req as Request & { userId?: string }).userId ?? 'placeholder-user-id';
-    const familyId = (req as Request & { familyId?: string }).familyId ?? 'placeholder-family-id';
+    const userId = (req as Request & { userId?: string }).userId;
+    const familyId = (req as Request & { familyId?: string }).familyId;
+    if (!familyId || !userId) {
+      throw AppError.unauthorized(ErrorCode.UNAUTHORIZED, 'Authentication required');
+    }
 
     const options: StartImportOptions = {
       accountId: bodyParse.data.accountId,
