@@ -6,6 +6,8 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   // Optional: AI classification falls back gracefully when not provided
   OPENAI_API_KEY: z.string().optional(),
+  // Optional: Telegram bot is disabled when not provided
+  TELEGRAM_BOT_TOKEN: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
